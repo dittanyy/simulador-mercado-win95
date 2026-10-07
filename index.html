@@ -1,0 +1,2720 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Simulador de Concentración de Mercado</title>
+<style>
+  /* ── Reset & base ── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --grey:      #c0c0c0;
+    --grey-dark: #808080;
+    --grey-lite: #dfdfdf;
+    --white:     #ffffff;
+    --black:     #000000;
+    --navy:      #000080;
+    --teal:      #008080;
+    --canvas:    #f0f0f0;
+
+    /* 3-D bevel helpers */
+    --raised: inset -1px -1px 0 var(--grey-dark),
+              inset  1px  1px 0 var(--white),
+              inset -2px -2px 0 #404040,
+              inset  2px  2px 0 var(--grey-lite);
+    --sunken: inset  1px  1px 0 var(--grey-dark),
+              inset -1px -1px 0 var(--white),
+              inset  2px  2px 0 #404040,
+              inset -2px -2px 0 var(--grey-lite);
+    --panel:  inset -1px -1px 0 var(--white),
+              inset  1px  1px 0 var(--grey-dark);
+  }
+
+  body {
+    background-color: var(--teal);
+    background-image: url('./assets/messi_edlp.webp');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+    font-family: "Arial", sans-serif;
+    font-size: 12px;
+    color: var(--black);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+  }
+
+  /* ── Window chrome ── */
+  .window {
+    background: var(--grey);
+    width: 100%;
+    max-width: 960px;
+    box-shadow: 2px 2px 0 #404040, -1px -1px 0 var(--white);
+    display: flex;
+    flex-direction: column;
+    position: relative; /* anchor for eval popup overlay */
+  }
+
+  /* Minimized: show only the title bar */
+  .window.minimized .menu-bar,
+  .window.minimized .app-body,
+  .window.minimized .palette-bar,
+  .window.minimized .status-bar,
+  .window.minimized .eval-popup-overlay,
+  .window.minimized .chart-fullscreen-overlay {
+    display: none !important;
+  }
+
+  .window.minimized {
+    width: auto;
+    min-width: 260px;
+    max-width: 480px;
+  }
+
+  /* Title bar restore hint when minimized */
+  .window.minimized .title-bar {
+    cursor: pointer;
+  }
+
+  .title-bar {
+    background: var(--navy);
+    color: var(--white);
+    font-family: "Arial", sans-serif;
+    font-weight: bold;
+    font-size: 12px;
+    padding: 3px 6px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    user-select: none;
+  }
+
+  .title-bar-left {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .title-bar-icon {
+    width: 16px;
+    height: 16px;
+    background: var(--grey);
+    box-shadow: var(--raised);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+  }
+
+  .title-bar-btns {
+    display: flex;
+    gap: 2px;
+  }
+
+  .tb-btn {
+    width: 16px;
+    height: 14px;
+    background: var(--grey);
+    box-shadow: var(--raised);
+    border: none;
+    cursor: pointer;
+    font-size: 9px;
+    font-family: "Arial", sans-serif;
+    font-weight: bold;
+    color: var(--black);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+  }
+  .tb-btn:active { box-shadow: var(--sunken); }
+
+  /* ── Menu bar ── */
+  .menu-bar {
+    background: var(--grey);
+    padding: 2px 4px;
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--grey-dark);
+  }
+
+  .menu-item {
+    padding: 2px 8px;
+    cursor: default;
+    font-size: 12px;
+    color: var(--black);
+    text-decoration: none;
+  }
+  .menu-item:hover {
+    background: var(--navy);
+    color: var(--white);
+  }
+  .menu-item span { text-decoration: underline; }
+
+  /* ── App body ── */
+  .app-body {
+    display: flex;
+    flex: 1;
+  }
+
+  /* ── Left toolbar ── */
+  .toolbar {
+    width: 54px;
+    background: var(--grey);
+    border-right: 2px solid var(--grey-dark);
+    padding: 2px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+    flex-shrink: 0;
+  }
+
+  .tool-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1px;
+    width: 100%;
+  }
+
+  .tool-btn {
+    width: 24px;
+    height: 24px;
+    background: var(--grey);
+    box-shadow: var(--raised);
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    line-height: 1;
+    padding: 0;
+    font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif;
+    color: var(--black);
+  }
+  .tool-btn:active, .tool-btn.active { box-shadow: var(--sunken); background: var(--grey-lite); }
+
+  .toolbar-divider {
+    width: 44px;
+    height: 2px;
+    background: var(--grey-dark);
+    box-shadow: 0 1px 0 var(--white);
+    margin: 3px 0;
+  }
+
+  .color-preview {
+    width: 44px;
+    height: 36px;
+    position: relative;
+    margin: 2px 0;
+  }
+  .color-preview .swatch-bg {
+    position: absolute;
+    right: 0; bottom: 0;
+    width: 28px; height: 22px;
+    background: var(--white);
+    box-shadow: var(--sunken);
+  }
+  .color-preview .swatch-fg {
+    position: absolute;
+    left: 0; top: 0;
+    width: 28px; height: 22px;
+    background: var(--black);
+    box-shadow: var(--raised);
+    z-index: 1;
+  }
+
+  /* ── Canvas area ── */
+  .canvas-area {
+    flex: 1;
+    background: var(--canvas);
+    padding: 6px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  /* ── Panels ── */
+  .panel {
+    background: var(--grey);
+    box-shadow: var(--raised);
+    padding: 8px;
+  }
+
+  .panel-title {
+    font-family: "Courier New", monospace;
+    font-size: 14px;
+    font-weight: bold;
+    margin-bottom: 8px;
+    color: var(--black);
+  }
+
+  /* ── Top row: Configuración + Caso particular ── */
+  .top-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+
+  /* ── Configuración ── */
+  .config-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+  }
+
+  .config-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .config-label {
+    font-family: "Courier New", monospace;
+    font-size: 11px;
+    min-width: 110px;
+  }
+
+  /* Checkboxes group */
+  .indicators-group {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+
+  .indicator-btn {
+    background: var(--grey);
+    box-shadow: var(--raised);
+    border: none;
+    padding: 2px 8px;
+    font-family: "Courier New", monospace;
+    font-size: 11px;
+    cursor: pointer;
+    color: var(--black);
+    position: relative;
+  }
+  .indicator-btn:active { box-shadow: var(--sunken); }
+  .indicator-btn.selected {
+    box-shadow: var(--sunken);
+    background: var(--grey-lite);
+  }
+  .indicator-btn input[type="checkbox"] {
+    position: absolute;
+    opacity: 0;
+    width: 0; height: 0;
+  }
+
+  /* Number inputs */
+  .win-input {
+    box-shadow: var(--sunken);
+    background: var(--white);
+    border: none;
+    padding: 2px 4px;
+    font-family: "Courier New", monospace;
+    font-size: 11px;
+    width: 60px;
+    outline: none;
+    color: var(--black);
+  }
+  .win-input:focus { outline: 1px dotted var(--black); }
+
+  /* Range slider */
+  .win-range-wrap {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1;
+  }
+
+  input[type="range"].win-range {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 4px;
+    background: var(--white);
+    box-shadow: var(--sunken);
+    outline: none;
+    flex: 1;
+    cursor: pointer;
+  }
+  input[type="range"].win-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 11px;
+    height: 19px;
+    background: var(--grey);
+    box-shadow: var(--raised);
+    cursor: pointer;
+  }
+  input[type="range"].win-range::-moz-range-thumb {
+    width: 11px;
+    height: 19px;
+    background: var(--grey);
+    box-shadow: var(--raised);
+    border: none;
+    cursor: pointer;
+  }
+
+  .range-val {
+    font-family: "Courier New", monospace;
+    font-size: 11px;
+    min-width: 44px;
+    background: var(--white);
+    box-shadow: var(--sunken);
+    padding: 1px 4px;
+    text-align: right;
+  }
+
+  /* ── Caso particular ── */
+
+  /* The top-row grid cells must not grow beyond their column width */
+  .top-row > .panel {
+    min-width: 0;
+    overflow: hidden; /* contain children */
+  }
+
+  .caso-scroll-wrap {
+    overflow-x: auto;
+    overflow-y: visible;
+    padding-bottom: 4px;
+    /* Must be width-constrained by parent — parent has min-width:0 above */
+    width: 100%;
+    /* Win95-style scrollbar */
+    scrollbar-width: thin;
+    scrollbar-color: var(--grey-dark) var(--grey-lite);
+  }
+  .caso-scroll-wrap::-webkit-scrollbar {
+    height: 10px;
+  }
+  .caso-scroll-wrap::-webkit-scrollbar-track {
+    background: var(--grey-lite);
+    box-shadow: inset 1px 1px 0 var(--grey-dark), inset -1px -1px 0 var(--white);
+  }
+  .caso-scroll-wrap::-webkit-scrollbar-thumb {
+    background: var(--grey);
+    box-shadow: inset -1px -1px 0 var(--grey-dark), inset 1px 1px 0 var(--white);
+  }
+
+  .bars-container {
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+    min-width: max-content;
+    padding: 4px 2px 2px;
+  }
+
+  .empresa-bar {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+  }
+
+  .empresa-label {
+    font-family: "Courier New", monospace;
+    font-size: 10px;
+  }
+
+  .bar-track {
+    width: 26px;
+    height: 100px;
+    background: var(--white);
+    box-shadow: var(--sunken);
+    position: relative;
+    display: flex;
+    flex-direction: column-reverse;
+    overflow: hidden;
+  }
+
+  .bar-fill {
+    background: #0000aa;
+    width: 100%;
+    transition: height 0.1s;
+  }
+
+  input[type="range"].vert-range {
+    -webkit-appearance: slider-vertical;
+    writing-mode: vertical-lr;
+    direction: rtl;
+    width: 26px;
+    height: 100px;
+    padding: 0;
+    background: var(--white);
+    box-shadow: var(--sunken);
+    cursor: pointer;
+    outline: none;
+  }
+  input[type="range"].vert-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 22px;
+    height: 10px;
+    background: var(--grey);
+    box-shadow: var(--raised);
+  }
+
+  .empresa-pct {
+    font-family: "Courier New", monospace;
+    font-size: 10px;
+    background: var(--white);
+    box-shadow: var(--sunken);
+    padding: 1px 2px;
+    width: 36px;
+    text-align: center;
+    border: none;
+    outline: none;
+    color: var(--black);
+    -moz-appearance: textfield;
+  }
+  .empresa-pct:focus { outline: 1px dotted var(--black); }
+  .empresa-pct::-webkit-outer-spin-button,
+  .empresa-pct::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+  .cuota-total {
+    font-family: "Courier New", monospace;
+    font-size: 11px;
+    margin-top: 6px;
+    padding: 2px 6px;
+    background: var(--white);
+    box-shadow: var(--sunken);
+    display: inline-block;
+    font-weight: bold;
+    transition: color 0.1s;
+  }
+  .cuota-total.exact  { color: #007700; }
+  .cuota-total.over   { color: #cc0000; }
+  .cuota-total.under  { color: #cc0000; }
+
+  .caso-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    margin-top: 6px;
+    gap: 6px;
+  }
+
+  .aleatorio-btn {
+    background: var(--grey);
+    box-shadow: var(--raised);
+    border: none;
+    padding: 2px 10px;
+    font-family: "Courier New", monospace;
+    font-size: 11px;
+    cursor: pointer;
+    color: var(--black);
+  }
+  .aleatorio-btn:active { box-shadow: var(--sunken); transform: translate(1px,1px); }
+  .aleatorio-btn:focus  { outline: 1px dotted var(--black); }
+
+  /* ── Middle row: Gráfico + Resultados/Evaluación ── */
+  .middle-row {
+    display: grid;
+    grid-template-columns: 1fr 0.6fr;
+    gap: 6px;
+  }
+
+  /* ── Chart panel ── */
+  .chart-area {
+    background: var(--white);
+    box-shadow: var(--sunken);
+    height: 300px;
+    position: relative;
+    overflow: hidden;
+    padding: 4px;
+  }
+
+  .chart-placeholder {
+    font-family: "Courier New", monospace;
+    font-size: 16px;
+    color: var(--grey-dark);
+    text-align: center;
+    user-select: none;
+    line-height: 1.6;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+  }
+
+  /* Decorative grid lines (only when placeholder visible) */
+  .chart-area.empty::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image:
+      repeating-linear-gradient(to right, #e0e0e0 0, #e0e0e0 1px, transparent 1px, transparent 40px),
+      repeating-linear-gradient(to bottom, #e0e0e0 0, #e0e0e0 1px, transparent 1px, transparent 40px);
+    pointer-events: none;
+  }
+
+  /* Canvas wrapper: ocupa todo el chart-area menos el padding */
+  .chart-canvas-wrap {
+    width: 100%;
+    height: 100%;
+    position: relative;
+  }
+
+  #chart-canvas,
+  #chart-fs-canvas {
+    display: block;
+  }
+
+  /* Chart type buttons */
+  .chart-type-row {
+    display: flex;
+    gap: 4px;
+    margin-top: 6px;
+  }
+
+  .chart-type-btn {
+    background: var(--grey);
+    box-shadow: var(--raised);
+    border: none;
+    padding: 3px 12px;
+    font-family: "Courier New", monospace;
+    font-size: 11px;
+    cursor: pointer;
+    color: var(--black);
+  }
+  .chart-type-btn:active { box-shadow: var(--sunken); }
+  .chart-type-btn.active {
+    box-shadow: var(--sunken);
+    background: var(--grey-lite);
+  }
+
+  /* ── Right column ── */
+  .right-col {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  /* ── Resultados ── */
+  .results-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .result-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px dotted var(--grey-dark);
+    padding: 2px 0;
+  }
+
+  .result-key {
+    font-family: "Courier New", monospace;
+    font-size: 11px;
+    font-weight: bold;
+    color: var(--black);
+  }
+
+  .result-val {
+    font-family: "Courier New", monospace;
+    font-size: 12px;
+    font-weight: bold;
+    background: var(--white);
+    box-shadow: var(--sunken);
+    padding: 1px 6px;
+    min-width: 64px;
+    text-align: right;
+  }
+
+  .results-placeholder {
+    font-family: "Courier New", monospace;
+    font-size: 10px;
+    color: var(--grey-dark);
+    text-align: center;
+    padding: 8px 0;
+  }
+
+  /* ── Evaluación ── */
+  .eval-options {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 4px;
+  }
+
+  .eval-option {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    padding: 4px 5px;
+    flex: 1 1 auto;
+  }
+  .eval-option:hover { background: var(--grey-lite); }
+
+  .win-radio {
+    width: 13px;
+    height: 13px;
+    border-radius: 50%;
+    background: var(--white);
+    box-shadow: var(--sunken);
+    flex-shrink: 0;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .win-radio.checked::after {
+    content: "";
+    width: 5px;
+    height: 5px;
+    background: var(--black);
+    border-radius: 50%;
+  }
+
+  .eval-text {
+    font-family: "Courier New", monospace;
+    font-size: clamp(9px, 1.1vw, 12px);
+    font-weight: bold;
+    color: var(--black);
+    line-height: 1.35;
+    word-break: break-word;
+  }
+
+  /* ── Eval pop-up dialog ── */
+  .eval-popup-overlay {
+    display: none;
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    z-index: 8000;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    padding: 12px;
+  }
+  .eval-popup-overlay.open { display: flex; }
+
+  /* GIF shown beside the popup */
+  .eval-result-gif {
+    /* Both gifs rendered at 200px tall, width scales proportionally */
+    height: 200px;
+    width: auto;
+    flex-shrink: 0;
+    image-rendering: auto;
+    /* correcto.gif: 293×346 → 200px tall → ~169px wide  */
+    /* incorrecto.gif: 109×270 → 200px tall → ~81px wide  */
+  }
+
+  .eval-popup {
+    background: var(--grey);
+    box-shadow: var(--raised), 4px 4px 0 #404040;
+    min-width: 340px;
+    max-width: min(580px, 90%);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+  }
+
+  .eval-popup-titlebar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 3px 6px;
+    font-family: "Arial", sans-serif;
+    font-size: 12px;
+    font-weight: bold;
+    color: var(--white);
+  }
+  .eval-popup-titlebar.correct { background: #006600; }
+  .eval-popup-titlebar.wrong   { background: #990000; }
+
+  .eval-popup-body {
+    padding: 16px 20px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .eval-popup-icon-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .eval-popup-icon {
+    font-size: 32px;
+    line-height: 1;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  .eval-popup-lines {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    flex: 1;
+  }
+
+  .eval-popup-title {
+    font-family: "Courier New", monospace;
+    font-size: 14px;
+    font-weight: bold;
+    color: var(--black);
+    line-height: 1.4;
+  }
+
+  .eval-popup-detail {
+    font-family: "Courier New", monospace;
+    font-size: 11px;
+    color: #111;
+    line-height: 1.65;
+    background: var(--white);
+    box-shadow: var(--sunken);
+    padding: 8px 10px;
+  }
+
+  .eval-popup-detail span {
+    display: block;
+  }
+
+  .eval-popup-footer {
+    display: flex;
+    justify-content: center;
+    padding: 6px 16px 12px;
+  }
+
+  .eval-popup-ok {
+    background: var(--grey);
+    box-shadow: var(--raised);
+    border: none;
+    padding: 4px 28px;
+    font-family: "Courier New", monospace;
+    font-size: 12px;
+    font-weight: bold;
+    cursor: pointer;
+    color: var(--black);
+    min-width: 80px;
+  }
+  .eval-popup-ok:active { box-shadow: var(--sunken); transform: translate(1px,1px); }
+  .eval-popup-ok:focus  { outline: 1px dotted var(--black); }
+
+  /* ── Fullscreen chart overlay ── */
+  .chart-fullscreen-overlay {
+    display: flex;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.72);
+    z-index: 9999;
+    align-items: center;
+    justify-content: center;
+    visibility: hidden;
+    pointer-events: none;
+    opacity: 0;
+  }
+  .chart-fullscreen-overlay.open {
+    visibility: visible;
+    pointer-events: auto;
+    opacity: 1;
+  }
+
+  .chart-fullscreen-box {
+    background: var(--grey);
+    box-shadow: var(--raised);
+    width: 90vw;
+    max-width: 960px;
+    height: 80vh;
+    display: flex;
+    flex-direction: column;
+    padding: 6px;
+    gap: 6px;
+  }
+
+  .chart-fs-titlebar {
+    background: var(--navy);
+    color: var(--white);
+    font-family: "Courier New", monospace;
+    font-size: 12px;
+    font-weight: bold;
+    padding: 3px 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+  }
+
+  .chart-fs-canvas-wrap {
+    background: var(--white);
+    box-shadow: var(--sunken);
+    flex: 1;
+    min-height: 0;
+    padding: 6px;
+    position: relative;
+  }
+
+  .chart-fs-btns {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  /* ── Swatch selected ring ── */
+  .swatch.selected-color {
+    outline: 2px solid #ff0000;
+    outline-offset: 1px;
+    box-shadow: 0 0 0 3px var(--white), 0 0 0 5px #ff0000;
+  }
+
+  /* ── Fullscreen button ── */
+  .fullscreen-btn {
+    background: var(--grey);
+    box-shadow: var(--raised);
+    border: none;
+    padding: 2px 8px;
+    font-family: "Courier New", monospace;
+    font-size: 11px;
+    cursor: pointer;
+    color: var(--black);
+    margin-left: 4px;
+  }
+  .fullscreen-btn:active { box-shadow: var(--sunken); }
+
+  /* ── Monte Carlo progress bar ── */
+  .mc-progress-wrap {
+    display: none;
+    flex-direction: column;
+    gap: 3px;
+    margin-top: 2px;
+  }
+  .mc-progress-wrap.visible { display: flex; }
+
+  .mc-progress-label {
+    font-family: "Courier New", monospace;
+    font-size: 10px;
+    color: var(--grey-dark);
+  }
+
+  .mc-progress-track {
+    width: 100%;
+    height: 14px;
+    background: var(--white);
+    box-shadow: var(--sunken);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .mc-progress-fill {
+    height: 100%;
+    width: 0%;
+    background: var(--navy);
+    transition: width 0.1s linear;
+    position: relative;
+  }
+
+  /* Dithered stripe overlay (retro Win95 progress) */
+  .mc-progress-fill::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: repeating-linear-gradient(
+      90deg,
+      transparent 0px, transparent 6px,
+      rgba(255,255,255,0.15) 6px, rgba(255,255,255,0.15) 8px
+    );
+  }
+
+  /* ── Clippy warning bubble ── */
+  .clippy-wrap {
+    display: none;
+    align-items: flex-start;
+    gap: 6px;
+    margin-top: 4px;
+  }
+  .clippy-wrap.visible { display: flex; }
+
+  .clippy-bubble {
+    background: #ffffc0;
+    box-shadow: var(--raised);
+    padding: 4px 7px;
+    font-family: "Courier New", monospace;
+    font-size: 10px;
+    color: #333;
+    line-height: 1.4;
+    position: relative;
+    flex: 1;
+  }
+  /* little left arrow on bubble */
+  .clippy-bubble::before {
+    content: "";
+    position: absolute;
+    left: -6px;
+    top: 6px;
+    border-top: 5px solid transparent;
+    border-bottom: 5px solid transparent;
+    border-right: 6px solid #808080;
+  }
+  .clippy-bubble::after {
+    content: "";
+    position: absolute;
+    left: -4px;
+    top: 7px;
+    border-top: 4px solid transparent;
+    border-bottom: 4px solid transparent;
+    border-right: 5px solid #ffffc0;
+  }
+
+  .clippy-icon {
+    width: 44px;
+    height: 44px;
+    flex-shrink: 0;
+    object-fit: contain;
+    image-rendering: auto;
+  }
+
+  .clippy-yes-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 4px;
+  }
+
+  .clippy-yes-row input[type="checkbox"] {
+    width: 12px;
+    height: 12px;
+    cursor: pointer;
+    accent-color: var(--navy);
+  }
+
+  .clippy-yes-row label {
+    font-family: "Courier New", monospace;
+    font-size: 10px;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  /* ── MC input numérico sincronizado ── */
+  .mc-input-sync {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  /* ── Run button ── */
+  .run-row {
+    display: flex;
+    justify-content: center;
+    padding: 4px 0;
+  }
+
+  .run-btn {
+    background: var(--grey);
+    box-shadow: var(--raised);
+    border: none;
+    padding: 5px 32px;
+    font-family: "Courier New", monospace;
+    font-size: 13px;
+    font-weight: bold;
+    cursor: pointer;
+    color: var(--black);
+    letter-spacing: 0.5px;
+  }
+  .run-btn:active { box-shadow: var(--sunken); transform: translate(1px,1px); }
+  .run-btn:focus { outline: 1px dotted var(--black); outline-offset: 2px; }
+
+  /* ── Bottom color palette ── */
+  .palette-bar {
+    background: var(--grey);
+    border-top: 2px solid var(--grey-dark);
+    padding: 3px 4px;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .palette-swatches {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1px;
+  }
+
+  .swatch {
+    width: 16px;
+    height: 16px;
+    box-shadow: var(--raised);
+    cursor: crosshair;
+  }
+
+  /* ── Status bar ── */
+  .status-bar {
+    background: var(--grey);
+    border-top: 1px solid var(--grey-dark);
+    padding: 2px 6px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .status-text {
+    font-family: "Arial", sans-serif;
+    font-size: 11px;
+    color: var(--black);
+  }
+
+  .status-right {
+    display: flex;
+    gap: 8px;
+  }
+
+  .status-cell {
+    box-shadow: var(--panel);
+    padding: 1px 8px;
+    font-family: "Arial", sans-serif;
+    font-size: 11px;
+  }
+
+  /* ── Utility ── */
+  .section-divider {
+    height: 2px;
+    background: var(--grey-dark);
+    box-shadow: 0 1px 0 var(--white);
+    margin: 2px 0 6px;
+  }
+
+  /* ── Responsive ── */
+  @media (max-width: 640px) {
+    .top-row, .middle-row { grid-template-columns: 1fr; }
+    .toolbar { width: 30px; }
+    .tool-btn { width: 22px; height: 22px; font-size: 11px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="window">
+
+  <!-- Title bar -->
+  <div class="title-bar">
+    <div class="title-bar-left">
+      <div class="title-bar-icon">📊</div>
+      <span>Simulador de Concentración de Mercado</span>
+    </div>
+    <div class="title-bar-btns">
+      <button class="tb-btn" title="Minimizar">_</button>
+      <button class="tb-btn" title="Maximizar">□</button>
+      <button class="tb-btn" title="Cerrar">✕</button>
+    </div>
+  </div>
+
+  <!-- Menu bar -->
+  <div class="menu-bar">
+    <a class="menu-item" href="#"><span>A</span>rchivo</a>
+    <a class="menu-item" href="#"><span>E</span>ditar</a>
+    <a class="menu-item" href="#"><span>V</span>er</a>
+    <a class="menu-item" href="#"><span>I</span>magen</a>
+    <a class="menu-item" href="#"><span>O</span>pciones</a>
+    <a class="menu-item" href="#"><span>A</span>yuda</a>
+  </div>
+
+  <!-- App body -->
+  <div class="app-body">
+
+    <!-- Left toolbar -->
+    <div class="toolbar">
+      <div class="tool-grid">
+        <button class="tool-btn" title="Selección">⬚</button>
+        <button class="tool-btn" title="Selección libre">⬡</button>
+        <button class="tool-btn" title="Goma">⬜</button>
+        <button class="tool-btn" title="Rellenar">🪣</button>
+        <button class="tool-btn" title="Cuentagotas">💉</button>
+        <button class="tool-btn" title="Lupa">🔍</button>
+        <button class="tool-btn" title="Lápiz">✏️</button>
+        <button class="tool-btn" title="Pincel">🖌</button>
+        <button class="tool-btn" title="Aerógrafo">💨</button>
+        <button class="tool-btn" title="Texto">A</button>
+        <button class="tool-btn" title="Línea">╱</button>
+        <button class="tool-btn" title="Curva">⌒</button>
+        <button class="tool-btn" title="Rectángulo">▭</button>
+        <button class="tool-btn" title="Polígono">⬠</button>
+        <button class="tool-btn" title="Elipse">⬭</button>
+        <button class="tool-btn" title="Rectángulo redondeado">▢</button>
+      </div>
+      <div class="toolbar-divider"></div>
+      <div class="color-preview">
+        <div class="swatch-bg"></div>
+        <div class="swatch-fg"></div>
+      </div>
+    </div>
+
+    <!-- Canvas / main content -->
+    <div class="canvas-area">
+
+      <!-- Top row -->
+      <div class="top-row">
+
+        <!-- Configuración -->
+        <div class="panel">
+          <div class="panel-title">Configuración</div>
+          <div class="section-divider"></div>
+          <div class="config-grid">
+
+            <!-- Indicadores -->
+            <div class="config-row">
+              <span class="config-label">Indicador</span>
+              <div class="indicators-group">
+                <button class="indicator-btn" id="btn-crk">
+                  <input type="checkbox" id="chk-crk">CR<sub>k</sub>
+                </button>
+                <button class="indicator-btn" id="btn-ihh">
+                  <input type="checkbox" id="chk-ihh">IHH
+                </button>
+                <button class="indicator-btn" id="btn-id">
+                  <input type="checkbox" id="chk-id">ID
+                </button>
+                <button class="indicator-btn" id="btn-ie">
+                  <input type="checkbox" id="chk-ie">IE
+                </button>
+              </div>
+            </div>
+
+            <!-- Valor de k -->
+            <div class="config-row">
+              <label class="config-label" for="val-k">Valor para k</label>
+              <input
+                class="win-input"
+                type="number"
+                id="val-k"
+                min="1" max="10" value="3"
+                style="width:50px"
+              >
+              <span style="font-family:'Courier New',monospace;font-size:10px;color:#808080">(1–10)</span>
+            </div>
+
+            <!-- Número de empresas -->
+            <div class="config-row" style="flex-wrap:nowrap">
+              <label class="config-label" for="val-n">Número de empresas</label>
+              <input
+                class="win-input"
+                type="number"
+                id="val-n"
+                min="2" max="100" value="4"
+                style="width:46px;flex-shrink:0"
+              >
+              <span style="font-family:'Courier New',monospace;font-size:10px;color:#808080;white-space:nowrap">(2–100)</span>
+            </div>
+
+            <!-- Monte Carlo -->
+            <div class="config-row" style="flex-wrap:nowrap">
+              <label class="config-label" for="val-mc">Iteraciones Monte Carlo</label>
+              <div class="mc-input-sync">
+                <input
+                  class="win-input"
+                  type="number"
+                  id="mc-num"
+                  min="100" max="30000" step="100" value="1000"
+                  style="width:62px"
+                >
+              </div>
+            </div>
+            <div class="config-row">
+              <div class="win-range-wrap" style="padding-left:4px">
+                <span style="font-family:'Courier New',monospace;font-size:10px">100</span>
+                <input
+                  class="win-range"
+                  type="range"
+                  id="val-mc"
+                  min="100" max="30000" step="100" value="1000"
+                >
+                <span style="font-family:'Courier New',monospace;font-size:10px">30k</span>
+              </div>
+            </div>
+
+            <!-- Clippy warning -->
+            <div class="clippy-wrap" id="clippy-wrap">
+              <img class="clippy-icon" src="data:image/gif;base64,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" alt="Clippy">
+              <div class="clippy-bubble">
+                ¡Parece que elegiste muchas<br>iteraciones! El navegador puede<br>tardar un poco.<br>
+                <strong>¿Estás seguro?</strong>
+                <div class="clippy-yes-row">
+                  <input type="checkbox" id="clippy-yes">
+                  <label for="clippy-yes">Sí, continuar</label>
+                </div>
+                <div class="clippy-yes-row">
+                  <input type="checkbox" id="clippy-noshowall">
+                  <label for="clippy-noshowall">No volver a mostrar</label>
+                </div>
+              </div>
+            </div>
+
+            <!-- Barra de progreso -->
+            <div class="mc-progress-wrap" id="mc-progress-wrap">
+              <span class="mc-progress-label" id="mc-progress-label">Simulando… 0 / 1000</span>
+              <div class="mc-progress-track">
+                <div class="mc-progress-fill" id="mc-progress-fill"></div>
+              </div>
+            </div>
+
+            <!-- Simular -->
+            <div class="config-row" style="justify-content:flex-end;margin-top:4px">
+              <button class="run-btn" id="run-btn">▶ Simular</button>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Caso particular -->
+        <div class="panel">
+          <div class="panel-title">Caso particular</div>
+          <div class="section-divider"></div>
+          <p style="font-family:'Courier New',monospace;font-size:10px;color:#808080;margin-bottom:5px">
+            Ajusta la cuota de mercado de cada empresa (suma debe ser 100%)
+          </p>
+          <div class="caso-scroll-wrap">
+            <div class="bars-container" id="bars-container">
+              <!-- generado dinámicamente por JS -->
+            </div>
+          </div>
+
+          <div class="caso-footer">
+            <button class="aleatorio-btn" id="btn-aleatorio">🎲 Aleatorio</button>
+            <div class="cuota-total" id="cuota-total">Total: –</div>
+          </div>
+        </div>
+
+      </div><!-- /top-row -->
+
+      <!-- Middle row -->
+      <div class="middle-row">
+
+        <!-- Gráfico -->
+        <div class="panel">
+          <div class="panel-title">Distribución simulada</div>
+          <div class="section-divider"></div>
+          <div class="chart-area empty" id="chart-area">
+            <div class="chart-placeholder" id="chart-placeholder">
+              📊<br>
+              Aquí va el gráfico<br>
+              <span style="font-size:11px">(presiona ▶ Simular)</span>
+            </div>
+            <div class="chart-canvas-wrap" id="chart-canvas-wrap" style="display:none">
+              <canvas id="chart-canvas"></canvas>
+            </div>
+          </div>
+          <div class="chart-type-row">
+            <button class="chart-type-btn active" id="btn-hist">Histograma</button>
+            <button class="chart-type-btn" id="btn-dens">Densidad</button>
+            <button class="fullscreen-btn" id="btn-fullscreen" title="Ver en pantalla completa">⛶ Ampliar</button>
+          </div>
+        </div>
+
+        <!-- Right col -->
+        <div class="right-col">
+
+          <!-- Resultados -->
+          <div class="panel" style="flex:1">
+            <div class="panel-title">Resultados</div>
+            <div class="section-divider"></div>
+            <div class="results-grid" id="results-grid">
+              <p class="results-placeholder">
+                Ejecuta la simulación<br>para ver los resultados.
+              </p>
+              <!-- Se llenará con JS -->
+              <div class="result-row" style="display:none" id="res-indicador">
+                <span class="result-key">Indicador</span>
+                <span class="result-val" id="res-ind-val">–</span>
+              </div>
+              <div class="result-row" style="display:none" id="res-media">
+                <span class="result-key">Media MC</span>
+                <span class="result-val" id="res-media-val">–</span>
+              </div>
+              <div class="result-row" style="display:none" id="res-sd">
+                <span class="result-key">Desv. Est.</span>
+                <span class="result-val" id="res-sd-val">–</span>
+              </div>
+              <div class="result-row" style="display:none" id="res-p5">
+                <span class="result-key">Perc. 5%</span>
+                <span class="result-val" id="res-p5-val">–</span>
+              </div>
+              <div class="result-row" style="display:none" id="res-p95">
+                <span class="result-key">Perc. 95%</span>
+                <span class="result-val" id="res-p95-val">–</span>
+              </div>
+              <div class="result-row" style="display:none" id="res-n">
+                <span class="result-key">Empresas (N)</span>
+                <span class="result-val" id="res-n-val">–</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Evaluación -->
+          <div class="panel">
+            <div class="panel-title">Evaluación</div>
+            <div class="section-divider"></div>
+            <p style="font-family:'Courier New',monospace;font-size:clamp(9px,1vw,11px);font-weight:bold;color:#000;margin-bottom:6px;line-height:1.5;width:100%">
+              Según el valor del indicador, ¿cómo clasificarías el nivel de concentración de este mercado?
+            </p>
+            <div class="eval-options" id="eval-options">
+
+              <label class="eval-option" id="eval-opt-low">
+                <div class="win-radio" id="radio-low"></div>
+                <span class="eval-text">No concentrado</span>
+              </label>
+
+              <label class="eval-option" id="eval-opt-mid">
+                <div class="win-radio" id="radio-mid"></div>
+                <span class="eval-text">Moderadamente<br>concentrado</span>
+              </label>
+
+              <label class="eval-option" id="eval-opt-high">
+                <div class="win-radio" id="radio-high"></div>
+                <span class="eval-text">Altamente<br>concentrado</span>
+              </label>
+
+            </div>
+
+          </div>
+
+        </div><!-- /right-col -->
+
+      </div><!-- /middle-row -->
+
+    </div><!-- /canvas-area -->
+
+  </div><!-- /app-body -->
+
+  <!-- Eval result pop-up -->
+  <div class="eval-popup-overlay" id="eval-popup-overlay">
+    <img class="eval-result-gif" id="eval-result-gif" src="" alt="" aria-hidden="true">
+    <div class="eval-popup" id="eval-popup">
+      <div class="eval-popup-titlebar" id="eval-popup-titlebar">
+        <span id="eval-popup-titletext">Resultado</span>
+        <button class="tb-btn" id="eval-popup-close">✕</button>
+      </div>
+      <div class="eval-popup-body">
+        <div class="eval-popup-icon-row">
+          <div class="eval-popup-icon" id="eval-popup-icon">❓</div>
+          <div class="eval-popup-lines">
+            <div class="eval-popup-title" id="eval-popup-title"></div>
+            <div class="eval-popup-detail" id="eval-popup-detail"></div>
+          </div>
+        </div>
+      </div>
+      <div class="eval-popup-footer">
+        <button class="eval-popup-ok" id="eval-popup-ok">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Color palette strip -->
+  <div class="palette-bar">
+    <div class="color-preview" style="width:36px;height:26px;flex-shrink:0">
+      <div class="swatch-bg" style="width:20px;height:16px"></div>
+      <div class="swatch-fg" style="width:20px;height:16px"></div>
+    </div>
+    <span style="font-family:'Courier New',monospace;font-size:9px;color:#404040;white-space:nowrap;padding:0 5px;flex-shrink:0">
+      Color del gráfico →
+    </span>
+    <div class="palette-swatches" id="palette-swatches">
+      <div class="swatch" data-color="#000000" style="background:#000000"></div>
+      <div class="swatch" data-color="#808080" style="background:#808080"></div>
+      <div class="swatch" data-color="#800000" style="background:#800000"></div>
+      <div class="swatch" data-color="#ff0000" style="background:#ff0000"></div>
+      <div class="swatch" data-color="#ff8000" style="background:#ff8000"></div>
+      <div class="swatch" data-color="#ffff00" style="background:#ffff00"></div>
+      <div class="swatch" data-color="#008000" style="background:#008000"></div>
+      <div class="swatch" data-color="#00ff00" style="background:#00ff00"></div>
+      <div class="swatch" data-color="#008080" style="background:#008080"></div>
+      <div class="swatch" data-color="#00ffff" style="background:#00ffff"></div>
+      <div class="swatch" data-color="#000080" style="background:#000080"></div>
+      <div class="swatch selected-color" data-color="#0000ff" style="background:#0000ff"></div>
+      <div class="swatch" data-color="#800080" style="background:#800080"></div>
+      <div class="swatch" data-color="#ff00ff" style="background:#ff00ff"></div>
+      <div class="swatch" data-color="#804000" style="background:#804000"></div>
+      <div class="swatch" data-color="#c0c0c0" style="background:#c0c0c0"></div>
+      <div class="swatch" data-color="#ffffff" style="background:#ffffff"></div>
+      <div class="swatch" data-color="#c08040" style="background:#c08040"></div>
+      <div class="swatch" data-color="#ffff80" style="background:#ffff80"></div>
+      <div class="swatch" data-color="#80ff80" style="background:#80ff80"></div>
+      <div class="swatch" data-color="#80ffff" style="background:#80ffff"></div>
+      <div class="swatch" data-color="#8080ff" style="background:#8080ff"></div>
+      <div class="swatch" data-color="#ff80ff" style="background:#ff80ff"></div>
+      <div class="swatch" data-color="#ff8080" style="background:#ff8080"></div>
+    </div>
+  </div>
+
+  <!-- Status bar -->
+  <div class="status-bar">
+    <span class="status-text" id="status-msg">Para obtener ayuda, haz clic en Ayuda &gt; Temas de ayuda.</span>
+    <div class="status-right">
+      <span class="status-cell" id="status-coords">N=4 | k=3</span>
+      <span class="status-cell" id="status-iter">MC: 1000</span>
+    </div>
+  </div>
+
+</div><!-- /window -->
+
+<!-- Fullscreen chart overlay -->
+<div class="chart-fullscreen-overlay" id="chart-fs-overlay">
+  <div class="chart-fullscreen-box">
+    <div class="chart-fs-titlebar">
+      <span>📊 Distribución simulada — Vista ampliada</span>
+      <button class="tb-btn" id="btn-fs-close" title="Cerrar">✕</button>
+    </div>
+    <div class="chart-fs-canvas-wrap">
+      <canvas id="chart-fs-canvas"></canvas>
+    </div>
+    <div class="chart-fs-btns">
+      <button class="chart-type-btn active" id="btn-fs-hist">Histograma</button>
+      <button class="chart-type-btn" id="btn-fs-dens">Densidad</button>
+    </div>
+  </div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+/* ============================================================
+   ÍNDICES DE CONCENTRACIÓN DE MERCADO
+   Convención: shares = array de cuotas en [0,1], suma = 1
+   ============================================================ */
+
+/**
+ * CR_k — Ratio de concentración de las k empresas más grandes.
+ * Rango: [k/N, 1]
+ * @param {number[]} shares  Cuotas en [0,1], suma = 1
+ * @param {number}   k       Número de empresas a sumar (entero ≥ 1)
+ * @returns {number}         Suma de las k cuotas más grandes
+ */
+function calcCRk(shares, k) {
+  const sorted = [...shares].sort((a, b) => b - a); // mayor → menor
+  const top = sorted.slice(0, k);
+  return top.reduce((acc, s) => acc + s, 0);
+}
+
+/**
+ * IHH — Índice Herfindahl-Hirschman.
+ * Rango: [10000/N, 10000]  (monopolio = 10000, competencia perfecta → 0)
+ * @param {number[]} shares  Cuotas en [0,1], suma = 1
+ * @returns {number}         Σ (sᵢ × 100)²
+ */
+function calcIHH(shares) {
+  return shares.reduce((acc, s) => acc + Math.pow(s * 100, 2), 0);
+}
+
+/**
+ * ID — Índice de Dominancia (Kwoka).
+ * Rango: [1/N, 1]  (1 = monopolio absoluto)
+ * Fórmula: Σ(sᵢ⁴) / (Σsᵢ²)²
+ * @param {number[]} shares  Cuotas en [0,1], suma = 1
+ * @returns {number}
+ */
+function calcID(shares) {
+  const sumS4 = shares.reduce((acc, s) => acc + Math.pow(s, 4), 0);
+  const sumS2 = shares.reduce((acc, s) => acc + Math.pow(s, 2), 0);
+  if (sumS2 === 0) return 0;
+  return sumS4 / Math.pow(sumS2, 2);
+}
+
+/**
+ * IE — Índice de Entropía de Shannon.
+ * Rango: [0, ln(N)]  (0 = monopolio, ln(N) = distribución perfectamente uniforme)
+ * Fórmula: −Σ sᵢ · ln(sᵢ)   (se ignora sᵢ = 0 por continuidad del límite)
+ * @param {number[]} shares  Cuotas en [0,1], suma = 1
+ * @returns {number}
+ */
+function calcIE(shares) {
+  return -shares.reduce((acc, s) => {
+    if (s <= 0) return acc; // lím s→0 de s·ln(s) = 0
+    return acc + s * Math.log(s);
+  }, 0);
+}
+
+/* ============================================================
+   CASO PARTICULAR — sliders dinámicos
+   ============================================================ */
+
+/**
+ * Genera cuotas aleatorias Dirichlet(α=1) redondeadas a 1 decimal,
+ * garantizando que la suma sea exactamente 100.0.
+ * Estrategia: redondear todos a 1 decimal, calcular el error acumulado
+ * y corregirlo en el elemento de mayor cuota (least noticeable).
+ * @param {number} n  Número de empresas
+ * @returns {number[]} Array de n valores en (0,100], suma = 100 (escala %)
+ */
+function dirichletSample(n) {
+  // Paso 1: muestrear y normalizar a [0,1]
+  const g = Array.from({ length: n }, () => -Math.log(Math.random()));
+  const gSum = g.reduce((a, b) => a + b, 0);
+  const raw = g.map(v => v / gSum * 100); // escala a porcentaje
+
+  // Paso 2: redondear a 1 decimal
+  const rounded = raw.map(v => Math.round(v * 10) / 10);
+
+  // Paso 3: calcular diferencia con 100 y ajustar el elemento más grande
+  const roundedSum = rounded.reduce((a, b) => a + b, 0);
+  const diff = Math.round((100 - roundedSum) * 10) / 10; // error en décimas
+  const maxIdx = rounded.indexOf(Math.max(...rounded));
+  rounded[maxIdx] = Math.round((rounded[maxIdx] + diff) * 10) / 10;
+
+  return rounded; // valores en %, e.g. [40.3, 35.1, 24.6]
+}
+
+/**
+ * Normaliza un array de cuotas (en %) para que sumen exactamente 100.
+ * Usa la misma corrección de redondeo en el elemento más grande.
+ * @param {number[]} pcts  Cuotas en escala 0–100
+ * @returns {number[]}     Cuotas en [0,1], suma = 1
+ */
+function normalizeShares(pcts) {
+  const total = pcts.reduce((a, b) => a + b, 0);
+  if (total === 0) return pcts.map(() => 1 / pcts.length);
+  return pcts.map(p => p / total);
+}
+
+// ── DOM refs ──
+const barsContainer = document.getElementById('bars-container');
+const cuotaTotal    = document.getElementById('cuota-total');
+const inputN        = document.getElementById('val-n');
+const btnAleatorio  = document.getElementById('btn-aleatorio');
+
+/** Lee los valores actuales de los inputs numéricos como array en % */
+function readPcts() {
+  return [...barsContainer.querySelectorAll('input.empresa-pct')]
+    .map(inp => parseFloat(inp.value) || 0);
+}
+
+/** Actualiza el indicador de suma total con 1 decimal */
+function updateTotal() {
+  const pcts = readPcts();
+  const sum  = Math.round(pcts.reduce((a, b) => a + b, 0) * 10) / 10;
+  cuotaTotal.textContent = `Total: ${sum.toFixed(1)}%`;
+  cuotaTotal.classList.remove('exact', 'over', 'under');
+  if (sum === 100) {
+    cuotaTotal.classList.add('exact');
+  } else {
+    cuotaTotal.classList.add(sum > 100 ? 'over' : 'under');
+  }
+}
+
+/**
+ * Sincroniza slider ↔ input numérico y actualiza el total.
+ * @param {HTMLInputElement} slider  El input[type=range]
+ * @param {HTMLInputElement} numInp  El input.empresa-pct
+ */
+function syncFromSlider(slider, numInp) {
+  const v = parseFloat(slider.value);
+  numInp.value = v.toFixed(1);
+  updateTotal();
+}
+
+function syncFromInput(numInp, slider) {
+  let v = parseFloat(numInp.value);
+  if (isNaN(v)) v = 0;
+  v = Math.max(0, Math.min(100, Math.round(v * 10) / 10));
+  numInp.value = v.toFixed(1);
+  slider.value = v;
+  updateTotal();
+}
+
+/**
+ * Renderiza N sliders verticales + inputs editables en el contenedor.
+ * @param {number[]} pcts  Cuotas en escala 0–100, suma ≈ 100
+ */
+function renderBars(pcts) {
+  const subscripts = ['₀','₁','₂','₃','₄','₅','₆','₇','₈','₉'];
+  const toSub = n => String(n).split('').map(d => subscripts[+d]).join('');
+
+  barsContainer.innerHTML = pcts.map((v, i) => {
+    const val = (Math.round(v * 10) / 10).toFixed(1);
+    return `
+      <div class="empresa-bar">
+        <span class="empresa-label">E${toSub(i + 1)}</span>
+        <input
+          class="vert-range"
+          type="range"
+          min="0" max="100" step="0.1"
+          value="${val}"
+          data-idx="${i}"
+        >
+        <input
+          class="empresa-pct"
+          type="number"
+          min="0" max="100" step="0.1"
+          value="${val}"
+          data-idx="${i}"
+        >
+      </div>`;
+  }).join('');
+
+  // Enlazar eventos slider ↔ input por índice
+  const sliders  = [...barsContainer.querySelectorAll('input.vert-range')];
+  const numInputs = [...barsContainer.querySelectorAll('input.empresa-pct')];
+
+  sliders.forEach((sl, i) => {
+    sl.addEventListener('input', () => syncFromSlider(sl, numInputs[i]));
+  });
+
+  numInputs.forEach((ni, i) => {
+    ni.addEventListener('change', () => syncFromInput(ni, sliders[i]));
+    ni.addEventListener('keydown', e => {
+      if (e.key === 'Enter') syncFromInput(ni, sliders[i]);
+    });
+  });
+
+  updateTotal();
+}
+
+/** Inicializa con N empresas y cuotas Dirichlet */
+function initBars(n) {
+  renderBars(dirichletSample(n));
+}
+
+// ── Evento: cambio de N ──
+inputN.addEventListener('change', () => {
+  const n = Math.max(2, Math.min(100, parseInt(inputN.value) || 2));
+  inputN.value = n;
+  initBars(n);
+
+  // 2. Mantener k ≤ N
+  const kInput = document.getElementById('val-k');
+  kInput.max = n;
+  const kCurrent = parseInt(kInput.value) || 1;
+  if (kCurrent > n) {
+    kInput.value = n;
+    document.getElementById('status-msg').textContent =
+      `ℹ k ajustado a ${n} porque no puede ser mayor que N = ${n}.`;
+  }
+
+  document.getElementById('status-coords').textContent =
+    `N=${n} | k=${kInput.value}`;
+});
+
+// ── Evento: botón Aleatorio ──
+btnAleatorio.addEventListener('click', () => {
+  const n = Math.max(2, Math.min(100, parseInt(inputN.value) || 2));
+  renderBars(dirichletSample(n));
+});
+
+// ── Arranque inicial ──
+const _initN = parseInt(inputN.value) || 4;
+document.getElementById('val-k').max = _initN;
+initBars(_initN);
+
+/* ============================================================
+   FUNCIÓN DE PRUEBA
+   Vector de referencia: [0.5, 0.3, 0.2]
+   Resultados esperados:
+     CR_k (k=2) = 0.80
+     IHH        = 3800
+     ID         ≈ 0.5000
+     IE         ≈ 1.0297
+   ============================================================ */
+function runTests() {
+  const shares = [0.5, 0.3, 0.2];
+
+  const crk = calcCRk(shares, 2);
+  const ihh = calcIHH(shares);
+  const id  = calcID(shares);
+  const ie  = calcIE(shares);
+
+  // Verificaciones matemáticas
+  const eps = 1e-9;
+  const ok  = (val, expected, tol = 1e-6) =>
+    Math.abs(val - expected) < tol ? "✅ OK" : `❌ ERROR (esperado ${expected})`;
+
+  console.group("🧪 Test índices — shares = [0.5, 0.3, 0.2]");
+
+  console.log(`CR_k (k=2) = ${crk.toFixed(6)}   ${ok(crk, 0.8)}`);
+  // 0.5 + 0.3 = 0.8
+
+  console.log(`IHH        = ${ihh.toFixed(6)}   ${ok(ihh, 3800)}`);
+  // (50² + 30² + 20²) = 2500 + 900 + 400 = 3800
+
+  const expectedID = (
+    (Math.pow(0.5,4) + Math.pow(0.3,4) + Math.pow(0.2,4)) /
+    Math.pow(Math.pow(0.5,2) + Math.pow(0.3,2) + Math.pow(0.2,2), 2)
+  );
+  console.log(`ID         = ${id.toFixed(6)}   ${ok(id, expectedID)}`);
+  // Σs⁴ = 0.0625+0.0081+0.0016 = 0.0722
+  // Σs² = 0.25+0.09+0.04 = 0.38  → (0.38)² = 0.1444
+  // ID  = 0.0722 / 0.1444 ≈ 0.5000
+
+  const expectedIE = -(0.5*Math.log(0.5) + 0.3*Math.log(0.3) + 0.2*Math.log(0.2));
+  console.log(`IE         = ${ie.toFixed(6)}   ${ok(ie, expectedIE)}`);
+  // ≈ 1.0297
+
+  console.log("─".repeat(42));
+  console.log("Notas de escala:");
+  console.log(`  IHH: rango [${(10000/shares.length).toFixed(0)}, 10000] para N=${shares.length}`);
+  console.log(`  IE : rango [0, ln(${shares.length})=${Math.log(shares.length).toFixed(4)}] para N=${shares.length}`);
+
+  console.groupEnd();
+}
+
+/* ============================================================
+   SINCRONIZACIÓN SLIDER MC ↔ INPUT NUMÉRICO
+   ============================================================ */
+const sliderMC  = document.getElementById('val-mc');
+const inputMC   = document.getElementById('mc-num');
+const clippyWrap = document.getElementById('clippy-wrap');
+
+let _clippyDismissed = false;
+
+function syncMC(val) {
+  const v = Math.max(100, Math.min(30000, Math.round(val / 100) * 100));
+  sliderMC.value = v;
+  inputMC.value  = v;
+  document.getElementById('status-iter').textContent = `MC: ${v.toLocaleString()}`;
+
+  if (v > 5000 && !_clippyDismissed) {
+    document.getElementById('clippy-yes').checked       = false;
+    document.getElementById('clippy-noshowall').checked = false;
+    clippyWrap.classList.add('visible');
+  } else {
+    clippyWrap.classList.remove('visible');
+  }
+}
+
+sliderMC.addEventListener('input', () => syncMC(+sliderMC.value));
+inputMC.addEventListener('change', () => syncMC(+inputMC.value));
+inputMC.addEventListener('keydown', e => { if (e.key === 'Enter') syncMC(+inputMC.value); });
+
+// ── Evento: cambio de k (actualiza status bar) ──
+document.getElementById('val-k').addEventListener('input', () => {
+  const k = document.getElementById('val-k').value;
+  const n = document.getElementById('val-n').value;
+  document.getElementById('status-coords').textContent = `N=${n} | k=${k}`;
+});
+
+/* ============================================================
+   MONTE CARLO — lógica principal
+   ============================================================ */
+
+const BATCH_SIZE = 250; // iteraciones por lote (no bloquea UI)
+let   mcRunning  = false;
+
+/**
+ * Estadísticas sobre un array numérico: media, sd, percentiles.
+ */
+function stats(arr) {
+  const n    = arr.length;
+  const mean = arr.reduce((a, b) => a + b, 0) / n;
+  const sd   = Math.sqrt(arr.reduce((a, b) => a + (b - mean) ** 2, 0) / n);
+  const sorted = [...arr].sort((a, b) => a - b);
+  const pct  = p => sorted[Math.floor(p * (n - 1))];
+  return { mean, sd, p5: pct(0.05), p95: pct(0.95) };
+}
+
+/**
+ * Muestra los resultados en el panel de Resultados.
+ * @param {string}   label   Nombre del índice
+ * @param {object}   s       Resultado de stats()
+ * @param {number}   observed Valor calculado sobre las cuotas del caso particular
+ * @param {string}   fmt     Función formateadora (función o null)
+ */
+function showResults(label, s, observed, fmt) {
+  const f = fmt || (x => x.toFixed(4));
+  document.querySelector('.results-placeholder').style.display = 'none';
+  const show = id => document.getElementById(id).style.display = 'flex';
+  ['res-indicador','res-media','res-sd','res-p5','res-p95','res-n'].forEach(show);
+
+  document.getElementById('res-ind-val').textContent   = `${label}: ${f(observed)}`;
+  document.getElementById('res-media-val').textContent = f(s.mean);
+  document.getElementById('res-sd-val').textContent    = f(s.sd);
+  document.getElementById('res-p5-val').textContent    = f(s.p5);
+  document.getElementById('res-p95-val').textContent   = f(s.p95);
+  document.getElementById('res-n-val').textContent     = document.getElementById('val-n').value;
+}
+
+/**
+ * Califica la concentración según umbrales normativos.
+ * Devuelve { category, label, threshold, reason }
+ *
+ * @param {string} indexLabel  'IHH' | 'CR_k' | 'ID' | 'IE'
+ * @param {number} value       Valor calculado del índice
+ * @param {number} n           Número de empresas (necesario para IE)
+ * @returns {{ category: 'low'|'mid'|'high', name: string,
+ *             threshold: string, reason: string }}
+ */
+/**
+ * Clasifica la concentración de mercado según umbrales con respaldo bibliográfico.
+ *
+ * Fuentes:
+ *  - IHH: U.S. DOJ & FTC "Horizontal Merger Guidelines" (2010), §5.3.
+ *    <1.500 = no concentrado; 1.500–2.500 = moderado; >2.500 = alto.
+ *    (Nota: la revisión de 2023 bajó el umbral alto a >1.800, pero los
+ *    umbrales de 2010 siguen siendo los más citados en la literatura.)
+ *  - CR_k: No existe un umbral universal. La Comisión Europea y la
+ *    literatura de OI usan CR4 como referencia orientativa:
+ *    <40% = disperso; 40–70% = moderado; >70% = alto
+ *    (Tirole, "The Theory of Industrial Organization", 1988; EC Guidelines).
+ *  - ID (Kwoka, 1977): No tiene umbrales normativos consolidados.
+ *    Se presentan como referencia descriptiva, no normativa.
+ *  - IE (Entropía de Theil): Sin umbrales regulatorios. Se clasifica
+ *    en relación al máximo teórico ln(N), siguiendo la interpretación
+ *    estándar de la entropía de Shannon como medida de dispersión.
+ *
+ * @param {string} indexLabel  'IHH' | 'CR_k' | 'ID' | 'IE'
+ * @param {number} value       Valor calculado
+ * @param {number} n           Número de empresas
+ * @returns {{ category, name, threshold, source, reason }}
+ */
+function classify(indexLabel, value, n) {
+
+  if (indexLabel === 'IHH') {
+    // DOJ/FTC Horizontal Merger Guidelines (2010), §5.3
+    const v = Math.round(value);
+    if (value < 1500) return {
+      category:  'low',
+      name:      'No concentrado',
+      threshold: `IHH < 1.500 (obtenido: ${v})`,
+      source:    'DOJ/FTC Horizontal Merger Guidelines (2010), §5.3',
+      reason:    `Con IHH = ${v}, el mercado cae por debajo del umbral de 1.500 definido por las directrices DOJ/FTC. Esto indica que ninguna empresa domina el mercado y la competencia está relativamente distribuida.`
+    };
+    if (value <= 2500) return {
+      category:  'mid',
+      name:      'Moderadamente concentrado',
+      threshold: `1.500 ≤ IHH ≤ 2.500 (obtenido: ${v})`,
+      source:    'DOJ/FTC Horizontal Merger Guidelines (2010), §5.3',
+      reason:    `Con IHH = ${v}, el mercado entra en la zona de concentración moderada (1.500–2.500). Las autoridades reguladoras prestan atención especial a fusiones en este rango, pues pueden aumentar significativamente la concentración.`
+    };
+    return {
+      category:  'high',
+      name:      'Altamente concentrado',
+      threshold: `IHH > 2.500 (obtenido: ${v})`,
+      source:    'DOJ/FTC Horizontal Merger Guidelines (2010), §5.3',
+      reason:    `Con IHH = ${v}, el mercado supera el umbral de 2.500 y se clasifica como altamente concentrado. En este rango, las autoridades presumen que una fusión puede tener efectos anticompetitivos.`
+    };
+  }
+
+  if (indexLabel === 'CR_k') {
+    // Tirole (1988); referencia orientativa CE para CR4
+    const pct  = value * 100;
+    const vStr = `${pct.toFixed(1)}%`;
+    if (pct < 40) return {
+      category:  'low',
+      name:      'No concentrado',
+      threshold: `CR_k < 40% (obtenido: ${vStr})`,
+      source:    'Referencia orientativa (Tirole 1988; CE Guidelines)',
+      reason:    `Las ${document.getElementById('val-k').value} mayores empresas acumulan solo ${vStr} del mercado, por debajo del 40%. Esto indica que el poder de mercado está distribuido entre muchos actores y ninguno domina.`
+    };
+    if (pct <= 70) return {
+      category:  'mid',
+      name:      'Moderadamente concentrado',
+      threshold: `40% ≤ CR_k ≤ 70% (obtenido: ${vStr})`,
+      source:    'Referencia orientativa (Tirole 1988; CE Guidelines)',
+      reason:    `Las ${document.getElementById('val-k').value} mayores empresas acumulan ${vStr}, dentro del rango de concentración moderada (40%–70%). Existe cierto poder de mercado compartido entre los líderes, aunque la competencia es posible.`
+    };
+    return {
+      category:  'high',
+      name:      'Altamente concentrado',
+      threshold: `CR_k > 70% (obtenido: ${vStr})`,
+      source:    'Referencia orientativa (Tirole 1988; CE Guidelines)',
+      reason:    `Las ${document.getElementById('val-k').value} mayores empresas controlan ${vStr} del mercado, superando el 70%. La concentración es alta y el riesgo de conductas anticompetitivas es elevado.`
+    };
+  }
+
+  if (indexLabel === 'ID') {
+    // Kwoka (1977) — sin umbrales normativos; clasificación descriptiva
+    const vStr = value.toFixed(4);
+    if (value < 0.25) return {
+      category:  'low',
+      name:      'No concentrado',
+      threshold: `ID < 0.25 (obtenido: ${vStr})`,
+      source:    'Kwoka (1977) — clasificación descriptiva, sin norma oficial',
+      reason:    `El Índice de Dominancia es ${vStr}, por debajo de 0.25. Esto indica que las cuotas están relativamente equilibradas y ninguna empresa tiene una posición dominante marcada. Nota: el ID no tiene umbrales regulatorios fijos; esta clasificación es orientativa.`
+    };
+    if (value <= 0.50) return {
+      category:  'mid',
+      name:      'Moderadamente concentrado',
+      threshold: `0.25 ≤ ID ≤ 0.50 (obtenido: ${vStr})`,
+      source:    'Kwoka (1977) — clasificación descriptiva, sin norma oficial',
+      reason:    `Con ID = ${vStr}, se detecta una dominancia moderada: hay empresas con cuotas superiores que pesan más en el índice, aunque sin llegar a monopolizar. Esta es una interpretación descriptiva del índice.`
+    };
+    return {
+      category:  'high',
+      name:      'Altamente concentrado',
+      threshold: `ID > 0.50 (obtenido: ${vStr})`,
+      source:    'Kwoka (1977) — clasificación descriptiva, sin norma oficial',
+      reason:    `Con ID = ${vStr}, el mercado muestra dominancia marcada: una o pocas empresas concentran una fracción desproporcionada del poder de mercado. Recuerda que el ID no tiene umbrales regulatorios establecidos.`
+    };
+  }
+
+  if (indexLabel === 'IE') {
+    // Entropía de Shannon; clasificación relativa a ln(N)
+    const maxIE  = Math.log(n);
+    const ratio  = maxIE > 0 ? value / maxIE : 0;
+    const pctMax = (ratio * 100).toFixed(1);
+    const vStr   = value.toFixed(4);
+    const mStr   = maxIE.toFixed(4);
+    if (ratio > 0.85) return {
+      category:  'low',
+      name:      'No concentrado',
+      threshold: `IE/ln(N) > 85% (obtenido: ${pctMax}% de ln(${n})=${mStr})`,
+      source:    'Shannon (1948); uso estándar en economía industrial',
+      reason:    `La entropía obtenida (${vStr}) equivale al ${pctMax}% de la máxima posible (${mStr} para N=${n}). Un valor tan alto significa que las cuotas están muy repartidas y el mercado es poco concentrado. Cuanto más cerca de ln(N), más igualitaria es la distribución.`
+    };
+    if (ratio >= 0.60) return {
+      category:  'mid',
+      name:      'Moderadamente concentrado',
+      threshold: `60% ≤ IE/ln(N) ≤ 85% (obtenido: ${pctMax}%)`,
+      source:    'Shannon (1948); uso estándar en economía industrial',
+      reason:    `La entropía (${vStr}) alcanza el ${pctMax}% del máximo teórico. Esto indica una distribución intermedia: hay cierta desigualdad en las cuotas, pero el mercado no está dominado por una sola empresa.`
+    };
+    return {
+      category:  'high',
+      name:      'Altamente concentrado',
+      threshold: `IE/ln(N) < 60% (obtenido: ${pctMax}%)`,
+      source:    'Shannon (1948); uso estándar en economía industrial',
+      reason:    `La entropía (${vStr}) solo alcanza el ${pctMax}% del máximo teórico (${mStr}). Un valor tan bajo indica que las cuotas están muy desiguales: pocas empresas controlan la mayor parte del mercado.`
+    };
+  }
+
+  return { category: 'mid', name: 'Moderadamente concentrado', threshold: '–', source: '–', reason: '–' };
+}
+
+/**
+ * Prepara la sección de evaluación para una nueva simulación.
+ * Guarda los datos necesarios en el DOM y resetea el estado visual.
+ */
+function prepareEval(indexLabel, value, percentile, n) {
+  const result = classify(indexLabel, value, n);
+  const opts   = document.getElementById('eval-options');
+  opts.dataset.answer     = result.category;
+  opts.dataset.name       = result.name;
+  opts.dataset.threshold  = result.threshold;
+  opts.dataset.source     = result.source;
+  opts.dataset.reason     = result.reason;
+  opts.dataset.percentile = percentile.toFixed(1);
+  opts.dataset.indexlabel = indexLabel;
+  opts.dataset.value      = value;
+
+  ['radio-low','radio-mid','radio-high'].forEach(id =>
+    document.getElementById(id).classList.remove('checked'));
+  // Close any open popup from a previous evaluation
+  document.getElementById('eval-popup-overlay').classList.remove('open');
+}
+
+/**
+ * Ejecuta la simulación Monte Carlo en lotes usando setTimeout.
+ * @param {number[]} fixedShares   Cuotas del caso particular [0,1], suma=1
+ * @param {number}   totalIter     Número total de iteraciones
+ * @param {string}   activeLabel   Nombre del índice seleccionado
+ * @param {number}   k             Valor de k (para CR_k)
+ * @param {number}   nVal          Número de empresas configurado
+ */
+function runMonteCarlo(fixedShares, totalIter, activeLabel, k, nVal) {
+  if (mcRunning) return;
+  mcRunning = true;
+
+  const n          = nVal || fixedShares.length;
+  const results    = [];
+  let   done       = 0;
+
+  const progressWrap  = document.getElementById('mc-progress-wrap');
+  const progressFill  = document.getElementById('mc-progress-fill');
+  const progressLabel = document.getElementById('mc-progress-label');
+  const runBtn        = document.getElementById('run-btn');
+  const statusMsg     = document.getElementById('status-msg');
+
+  // UI: inicio
+  progressWrap.classList.add('visible');
+  progressFill.style.width = '0%';
+  progressLabel.textContent = `Simulando… 0 / ${totalIter}`;
+  runBtn.disabled = true;
+  runBtn.textContent = '⏳ Simulando…';
+  statusMsg.textContent = `▶ Monte Carlo en curso: ${totalIter} iteraciones, N=${n}`;
+
+  // Calcular el valor observado con las cuotas del caso particular
+  let observed;
+  if      (activeLabel === 'IHH')  observed = calcIHH(fixedShares);
+  else if (activeLabel === 'CR_k') observed = calcCRk(fixedShares, k);
+  else if (activeLabel === 'ID')   observed = calcID(fixedShares);
+  else                             observed = calcIE(fixedShares);
+
+  function processBatch() {
+    const batchEnd = Math.min(done + BATCH_SIZE, totalIter);
+
+    for (let i = done; i < batchEnd; i++) {
+      // Muestra Dirichlet(α=1): gᵢ = −ln(Uᵢ), normalizar
+      const g    = Array.from({ length: n }, () => -Math.log(Math.random()));
+      const gSum = g.reduce((a, b) => a + b, 0);
+      const s    = g.map(v => v / gSum);
+      // Corrección explícita: ajustar el último elemento para garantizar suma = 1
+      const sSum = s.reduce((a, b) => a + b, 0);
+      s[s.length - 1] += (1 - sSum);
+
+      let val;
+      if      (activeLabel === 'IHH')  val = calcIHH(s);
+      else if (activeLabel === 'CR_k') val = calcCRk(s, k);
+      else if (activeLabel === 'ID')   val = calcID(s);
+      else                             val = calcIE(s);
+
+      results.push(val);
+    }
+
+    done = batchEnd;
+    const pct = Math.round((done / totalIter) * 100);
+    progressFill.style.width  = pct + '%';
+    progressLabel.textContent = `Simulando… ${done} / ${totalIter}`;
+
+    if (done < totalIter) {
+      setTimeout(processBatch, 0); // cede el hilo al navegador
+    } else {
+      finalize();
+    }
+  }
+
+  function finalize() {
+    mcRunning = false;
+    runBtn.disabled    = false;
+    runBtn.textContent = '▶ Simular';
+    progressWrap.classList.remove('visible');
+    statusMsg.textContent = `✔ Simulación completada — ${totalIter} iteraciones`;
+
+    const s = stats(results);
+
+    const fmt = activeLabel === 'IHH'
+      ? x => x.toFixed(0)
+      : x => x.toFixed(4);
+
+    showResults(activeLabel, s, observed, fmt);
+
+    const obsPct = calcPercentile(results, observed);
+    prepareEval(activeLabel, observed, obsPct, n);
+
+    // Guardar datos globales para el toggle Histograma / Densidad
+    window._chartData = { results, observed, label: activeLabel };
+    renderChart(document.getElementById('btn-hist').classList.contains('active') ? 'hist' : 'dens');
+  }
+
+  setTimeout(processBatch, 0);
+}
+
+// ── Clippy: ocultar al marcar "sí" ──
+document.getElementById('clippy-yes').addEventListener('change', function() {
+  if (this.checked) clippyWrap.classList.remove('visible');
+});
+
+// ── Clippy: no volver a mostrar ──
+document.getElementById('clippy-noshowall').addEventListener('change', function() {
+  if (this.checked) {
+    _clippyDismissed = true;
+    clippyWrap.classList.remove('visible');
+  } else {
+    _clippyDismissed = false;
+  }
+});
+
+// ── Evento: botón Simular ──
+document.getElementById('run-btn').addEventListener('click', () => {
+  if (mcRunning) return;
+
+  const statusMsg = document.getElementById('status-msg');
+  const pcts = readPcts();
+
+  // 1a. Validar cuotas individuales: cada una debe estar en [0, 100]
+  const badIdx = pcts.findIndex(p => p < 0 || p > 100);
+  if (badIdx !== -1) {
+    statusMsg.textContent =
+      `⚠ La cuota de E${badIdx + 1} es ${pcts[badIdx].toFixed(1)}% — cada cuota debe estar entre 0% y 100%.`;
+    return;
+  }
+
+  // 1b. Validar suma exacta = 100%
+  const total = Math.round(pcts.reduce((a, b) => a + b, 0) * 10) / 10;
+  if (total === 0) {
+    statusMsg.textContent = '⚠ Todas las cuotas son 0%. Ajusta los sliders antes de simular.';
+    return;
+  }
+  if (total !== 100) {
+    statusMsg.textContent =
+      `⚠ La suma de cuotas es ${total}% — debe ser exactamente 100%. ` +
+      `Diferencia: ${(total - 100).toFixed(1)}%. Usa el botón 🎲 Aleatorio para un punto de partida válido.`;
+    return;
+  }
+
+  // Las cuotas son válidas; convertir a [0,1] sin autocorrección silenciosa
+  const shares = pcts.map(p => p / 100);
+
+  // 2. Validar k ≤ N
+  const nVal = Math.max(2, Math.min(100, parseInt(document.getElementById('val-n').value) || 2));
+  const kRaw = parseInt(document.getElementById('val-k').value) || 1;
+  if (kRaw > nVal) {
+    statusMsg.textContent =
+      `⚠ k = ${kRaw} no puede ser mayor que N = ${nVal}. Reduce k antes de simular.`;
+    return;
+  }
+  const k = Math.max(1, Math.min(nVal, kRaw));
+
+  // Indicador seleccionado
+  const indicadores = [
+    { id: 'btn-crk', label: 'CR_k' },
+    { id: 'btn-ihh', label: 'IHH'  },
+    { id: 'btn-id',  label: 'ID'   },
+    { id: 'btn-ie',  label: 'IE'   },
+  ];
+  const active = indicadores.find(ind =>
+    document.getElementById(ind.id).classList.contains('selected')
+  );
+  if (!active) {
+    statusMsg.textContent = '⚠ Selecciona al menos un indicador antes de simular.';
+    return;
+  }
+
+  const totalIter = Math.max(100, Math.min(30000, +sliderMC.value));
+  runMonteCarlo(shares, totalIter, active.label, k, nVal);
+});
+
+/* ── Toggle botones indicadores (solo uno activo a la vez) ── */
+['btn-crk','btn-ihh','btn-id','btn-ie'].forEach(id => {
+  document.getElementById(id).addEventListener('click', () => {
+    ['btn-crk','btn-ihh','btn-id','btn-ie'].forEach(bid =>
+      document.getElementById(bid).classList.remove('selected'));
+    document.getElementById(id).classList.add('selected');
+  });
+});
+
+/* ============================================================
+   GRÁFICOS — Chart.js  (histograma + KDE con paleta por índice)
+   ============================================================ */
+
+/* ── Color dinámico desde la paleta inferior ── */
+let _selectedColor = '#0000ff'; // default: azul
+
+/**
+ * Convierte hex #rrggbb a {r,g,b}
+ */
+function hexToRgb(hex) {
+  const h = hex.replace('#','');
+  return {
+    r: parseInt(h.slice(0,2),16),
+    g: parseInt(h.slice(2,4),16),
+    b: parseInt(h.slice(4,6),16),
+  };
+}
+
+/**
+ * Devuelve un color de contraste para la línea de observación.
+ * Si el color elegido es claro/amarillo, usa rojo; si es rojo, usa navy, etc.
+ */
+function contrastColor(hex) {
+  const { r, g, b } = hexToRgb(hex);
+  const luminance = (0.299*r + 0.587*g + 0.114*b) / 255;
+  // Si el color es muy luminoso (amarillo, blanco, etc.) → negro
+  if (luminance > 0.7) return '#000000';
+  // Si es azul → rojo
+  if (b > r && b > g) return '#ff0000';
+  // Si es rojo → navy
+  if (r > g && r > b) return '#000080';
+  // Si es verde → magenta
+  if (g > r && g > b) return '#ff00ff';
+  return '#ff0000';
+}
+
+/**
+ * Construye la paleta dinámica desde el color seleccionado.
+ */
+function buildPalette(hex) {
+  const { r, g, b } = hexToRgb(hex);
+  return {
+    barFill:    `rgba(${r},${g},${b},0.70)`,
+    barBorder:  `rgba(${Math.max(0,r-50)},${Math.max(0,g-50)},${Math.max(0,b-50)},1)`,
+    lineFill:   `rgba(${r},${g},${b},0.18)`,
+    lineStroke: `rgba(${Math.max(0,r-40)},${Math.max(0,g-40)},${Math.max(0,b-40)},1)`,
+    obsLine:    contrastColor(hex),
+  };
+}
+
+/* Eventos de selección de swatch */
+document.getElementById('palette-swatches').addEventListener('click', e => {
+  const sw = e.target.closest('.swatch');
+  if (!sw || !sw.dataset.color) return;
+  document.querySelectorAll('.swatch').forEach(s => s.classList.remove('selected-color'));
+  sw.classList.add('selected-color');
+  _selectedColor = sw.dataset.color;
+  // Re-renderizar si hay datos
+  if (window._chartData) {
+    const mode = document.getElementById('btn-hist').classList.contains('active') ? 'hist' : 'dens';
+    renderChart(mode);
+  }
+});
+
+// Formateadores de eje X por índice
+const INDEX_FMT = {
+  CR_k: v => (v * 100).toFixed(1) + '%',
+  IHH:  v => Math.round(v).toString(),
+  ID:   v => v.toFixed(4),
+  IE:   v => v.toFixed(4),
+};
+
+/**
+ * Construye el histograma: retorna { edges, counts, binWidth }
+ * con entre 30 y 50 bins usando la regla de Sturges como guía.
+ * forceMin / forceMax permiten extender el rango hasta los límites teóricos.
+ */
+function buildHistogram(data, nBins, forceMin = null, forceMax = null) {
+  const mn  = forceMin !== null ? forceMin : Math.min(...data);
+  const mx  = forceMax !== null ? forceMax : Math.max(...data);
+  const bw  = (mx - mn) / nBins;
+  const counts = new Array(nBins).fill(0);
+  data.forEach(v => {
+    let b = Math.floor((v - mn) / bw);
+    if (b < 0) b = 0;
+    if (b >= nBins) b = nBins - 1;
+    counts[b]++;
+  });
+  const edges = Array.from({ length: nBins }, (_, i) => mn + i * bw);
+  return { edges, counts, binWidth: bw, min: mn, max: mx };
+}
+
+/**
+ * Gaussian KDE sobre los datos. Bandwidth de Silverman.
+ * Devuelve { xs, ys } con ~200 puntos.
+ * forceMin / forceMax extienden el rango hasta los límites teóricos.
+ */
+function buildKDE(data, nPoints = 200, forceMin = null, forceMax = null) {
+  const n    = data.length;
+  const mn   = Math.min(...data);
+  const mx   = Math.max(...data);
+  const std  = Math.sqrt(data.reduce((a, v) => {
+    const m = data.reduce((s, x) => s + x, 0) / n;
+    return a + (v - m) ** 2;
+  }, 0) / n);
+  const h    = 1.06 * std * Math.pow(n, -0.2); // Silverman
+  const pad  = h * 3;
+  const lo   = forceMin !== null ? forceMin : mn - pad;
+  const hi   = forceMax !== null ? forceMax : mx + pad;
+  const step = (hi - lo) / nPoints;
+  const gauss = u => Math.exp(-0.5 * u * u) / Math.sqrt(2 * Math.PI);
+
+  const xs = [], ys = [];
+  for (let i = 0; i <= nPoints; i++) {
+    const x = lo + i * step;
+    const y = data.reduce((s, xi) => s + gauss((x - xi) / h), 0) / (n * h);
+    xs.push(x);
+    ys.push(y);
+  }
+  return { xs, ys };
+}
+
+/**
+ * Plugin Chart.js: dibuja la línea vertical del valor observado.
+ * Usa rawXs (array numérico de centros de bin o puntos KDE) almacenado
+ * en chart.data._meta para calcular la posición en píxeles con
+ * interpolación lineal — sin parsear strings formateados.
+ */
+const verticalLinePlugin = {
+  id: 'verticalLine',
+  afterDraw(chart) {
+    const meta = chart.data._meta;
+    if (!meta) return;
+    const { observed, label, palette, fmt, percentile, rawXs, isBar } = meta;
+    const xScale = chart.scales.x;
+    const yScale = chart.scales.y;
+    if (!xScale || !yScale || !rawXs) return;
+
+    // Ambos tipos de gráfico usan eje X categórico en Chart.js 4.
+    // rawXs contiene los valores numéricos reales de cada label (centros de
+    // bin para histograma, puntos KDE para densidad). Buscamos el índice
+    // cuyo valor sea más cercano a `observed` y lo usamos directamente.
+    let closestIdx = 0;
+    let minDist = Infinity;
+    rawXs.forEach((v, i) => {
+      const d = Math.abs(v - observed);
+      if (d < minDist) { minDist = d; closestIdx = i; }
+    });
+
+    // Interpolación subpíxel entre el índice anterior y posterior para
+    // mayor precisión visual (especialmente notable en el gráfico KDE).
+    const iL = Math.max(0, closestIdx - 1);
+    const iR = Math.min(rawXs.length - 1, closestIdx + 1);
+    const pL = xScale.getPixelForValue(iL);
+    const pR = xScale.getPixelForValue(iR);
+    const xL = rawXs[iL];
+    const xR = rawXs[iR];
+    const t  = xR !== xL ? (observed - xL) / (xR - xL) : 0.5;
+    const xPx = pL + t * (pR - pL);
+
+    const ctx = chart.ctx;
+    const top = yScale.top;
+    const bot = yScale.bottom;
+
+    ctx.save();
+
+    // Línea punteada
+    ctx.setLineDash([5, 4]);
+    ctx.lineWidth   = 2.5;
+    ctx.strokeStyle = palette.obsLine;
+    ctx.beginPath();
+    ctx.moveTo(xPx, top);
+    ctx.lineTo(xPx, bot);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Etiqueta con valor y percentil
+    const text1 = `${label}=${fmt(observed)}`;
+    const text2 = `p${percentile.toFixed(1)}`;
+    const boxW  = Math.max(ctx.measureText(text1).width, ctx.measureText(text2).width) + 10;
+    const boxH  = 30;
+    let   bx    = xPx + 5;
+    if (bx + boxW > chart.width - 10) bx = xPx - boxW - 5;
+    const by = top + 6;
+
+    ctx.fillStyle   = 'rgba(255,255,200,0.92)';
+    ctx.strokeStyle = palette.obsLine;
+    ctx.lineWidth   = 1.5;
+    ctx.fillRect(bx, by, boxW, boxH);
+    ctx.strokeRect(bx, by, boxW, boxH);
+
+    ctx.fillStyle  = '#000';
+    ctx.font       = 'bold 10px "Courier New", monospace';
+    ctx.textAlign  = 'left';
+    ctx.fillText(text1, bx + 5, by + 11);
+    ctx.font       = '9px "Courier New", monospace';
+    ctx.fillStyle  = palette.obsLine;
+    ctx.fillText(text2, bx + 5, by + 23);
+
+    ctx.restore();
+  }
+};
+
+// Registrar plugin globalmente
+Chart.register(verticalLinePlugin);
+
+/**
+ * Calcula el percentil del valor observado dentro del array de resultados.
+ * = % de simulaciones ≤ observed
+ */
+function calcPercentile(results, observed) {
+  const below = results.filter(v => v <= observed).length;
+  return (below / results.length) * 100;
+}
+
+// Instancias separadas: inline y fullscreen
+let _chartInstance   = null;
+let _chartInstanceFs = null;
+
+/**
+ * Construye la configuración Chart.js compartida por inline y fullscreen.
+ * @param {'hist'|'dens'} mode
+ * @param {boolean} isFs  Si es fullscreen (ticks más grandes)
+ */
+/**
+ * Rango teórico completo de cada índice [min, max].
+ * Para IE el máximo depende de N, que está en _chartData.
+ */
+function theoreticalRange(label, n) {
+  if (label === 'CR_k') return [0, 1];
+  if (label === 'IHH')  return [0, 10000];
+  if (label === 'ID')   return [0, 1];
+  if (label === 'IE')   return [0, Math.log(n)];
+  return [null, null];
+}
+
+function buildChartConfig(mode, isFs = false) {
+  const cd = window._chartData;
+  if (!cd) return null;
+
+  const { results, observed, label } = cd;
+  const n       = parseInt(document.getElementById('val-n').value) || results.length;
+  const palette = buildPalette(_selectedColor);
+  const fmt     = INDEX_FMT[label] || (v => v.toFixed(4));
+  const pct     = calcPercentile(results, observed);
+  const nBins   = Math.min(50, Math.max(30, Math.round(Math.sqrt(results.length) * 1.5)));
+
+  // In fullscreen, use the full theoretical range for the x-axis
+  const [tMin, tMax] = isFs ? theoreticalRange(label, n) : [null, null];
+
+  const tickFont  = { family: '"Courier New", monospace', size: isFs ? 11 : 9 };
+  const titleFont = { family: '"Courier New", monospace', size: isFs ? 12 : 10 };
+
+  // Ejes sin grilla, pocos ticks
+  const commonScaleOpts = {
+    grid:  { display: false },
+    border: { display: true, color: '#808080' },
+    ticks: {
+      font:          tickFont,
+      color:         '#333',
+      maxTicksLimit: 6,   // ← pocos números
+      maxRotation:   0,
+    },
+  };
+
+  const tooltipOpts = {
+    bodyFont:  { family: '"Courier New", monospace', size: 10 },
+    titleFont: { family: '"Courier New", monospace', size: 10 },
+  };
+
+  const meta = { observed, label, palette, fmt, percentile: pct };
+
+  if (mode === 'hist') {
+    const { edges, counts, binWidth } = buildHistogram(results, nBins, tMin, tMax);
+    // rawXs: numeric centers of each bin (in the same units as `observed`)
+    const rawXs = edges.map(e => e + binWidth / 2);
+    const labels = rawXs.map(v => fmt(v));
+
+    return {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Frecuencia',
+          data:  counts,
+          backgroundColor: palette.barFill,
+          borderColor:     palette.barBorder,
+          borderWidth:     1,
+          barPercentage:   1.0,
+          categoryPercentage: 1.0,
+        }],
+        _meta: { ...meta, rawXs, isBar: true },
+      },
+      options: {
+        animation: { duration: 300 },
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { ...tooltipOpts, callbacks: {
+            title: i => `${label} ≈ ${i[0].label}`,
+            label: i => `Frecuencia: ${i.raw}`,
+          }},
+        },
+        scales: {
+          x: { ...commonScaleOpts, title: { display: true, text: label, font: titleFont } },
+          y: { ...commonScaleOpts, beginAtZero: true, title: { display: true, text: 'Frecuencia', font: titleFont } },
+        },
+      },
+    };
+  } else {
+    const { xs, ys } = buildKDE(results, 200, tMin, tMax);
+    // rawXs: the actual numeric x values (same units as `observed`)
+    const fmtLabels  = xs.map(x => fmt(x));
+
+    return {
+      type: 'line',
+      data: {
+        labels: fmtLabels,
+        datasets: [{
+          label: 'Densidad',
+          data:   ys,
+          borderColor:     palette.lineStroke,
+          backgroundColor: palette.lineFill,
+          borderWidth:     2.5,
+          pointRadius:     0,
+          fill:            true,
+          tension:         0.4,
+        }],
+        _meta: { ...meta, rawXs: xs, isBar: false },
+      },
+      options: {
+        animation: { duration: 300 },
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { ...tooltipOpts, callbacks: {
+            title: i => `${label} ≈ ${i[0].label}`,
+            label: i => `Densidad: ${i.raw.toFixed(4)}`,
+          }},
+        },
+        scales: {
+          x: { ...commonScaleOpts, title: { display: true, text: label, font: titleFont },
+               ticks: { ...commonScaleOpts.ticks, maxTicksLimit: 8 } },
+          y: { ...commonScaleOpts, beginAtZero: true, title: { display: true, text: 'Densidad', font: titleFont } },
+        },
+      },
+    };
+  }
+}
+
+/**
+ * Renderiza el gráfico inline (panel principal).
+ */
+function renderChart(mode) {
+  if (!window._chartData) return;
+
+  const area        = document.getElementById('chart-area');
+  const wrap        = document.getElementById('chart-canvas-wrap');
+  const canvas      = document.getElementById('chart-canvas');
+  const placeholder = document.getElementById('chart-placeholder');
+
+  area.classList.remove('empty');
+  placeholder.style.display = 'none';
+  wrap.style.display        = 'block';
+
+  // Destruir instancia anterior ANTES de reusar el mismo canvas
+  if (_chartInstance) { _chartInstance.destroy(); _chartInstance = null; }
+
+  const cfg = buildChartConfig(mode, false);
+  if (cfg) _chartInstance = new Chart(canvas, cfg);
+}
+
+/**
+ * Renderiza el gráfico en el modal fullscreen.
+ */
+function renderChartFs(mode) {
+  if (!window._chartData) return;
+  const canvas = document.getElementById('chart-fs-canvas');
+  if (_chartInstanceFs) { _chartInstanceFs.destroy(); _chartInstanceFs = null; }
+  const cfg = buildChartConfig(mode, true);
+  if (cfg) _chartInstanceFs = new Chart(canvas, cfg);
+}
+
+/* ── Toggle inline: Histograma / Densidad ── */
+document.getElementById('btn-hist').addEventListener('click', () => {
+  document.getElementById('btn-hist').classList.add('active');
+  document.getElementById('btn-dens').classList.remove('active');
+  renderChart('hist');
+});
+document.getElementById('btn-dens').addEventListener('click', () => {
+  document.getElementById('btn-dens').classList.add('active');
+  document.getElementById('btn-hist').classList.remove('active');
+  renderChart('dens');
+});
+
+/* ── Fullscreen: abrir / cerrar / toggle ── */
+function getFsOverlay() { return document.getElementById('chart-fs-overlay'); }
+
+document.getElementById('btn-fullscreen').addEventListener('click', () => {
+  const ov   = getFsOverlay();
+  const mode = document.getElementById('btn-hist').classList.contains('active') ? 'hist' : 'dens';
+  ov.classList.add('open');
+  document.getElementById('btn-fs-hist').classList.toggle('active', mode === 'hist');
+  document.getElementById('btn-fs-dens').classList.toggle('active', mode === 'dens');
+  // rAF doble: espera que el overlay sea visible y tenga dimensiones reales
+  requestAnimationFrame(() => requestAnimationFrame(() => renderChartFs(mode)));
+});
+
+document.getElementById('btn-fs-close').addEventListener('click', () => {
+  getFsOverlay().classList.remove('open');
+  if (_chartInstanceFs) { _chartInstanceFs.destroy(); _chartInstanceFs = null; }
+});
+
+document.addEventListener('click', e => {
+  const ov = getFsOverlay();
+  if (e.target === ov) {
+    ov.classList.remove('open');
+    if (_chartInstanceFs) { _chartInstanceFs.destroy(); _chartInstanceFs = null; }
+  }
+});
+
+document.getElementById('btn-fs-hist').addEventListener('click', () => {
+  document.getElementById('btn-fs-hist').classList.add('active');
+  document.getElementById('btn-fs-dens').classList.remove('active');
+  renderChartFs('hist');
+});
+document.getElementById('btn-fs-dens').addEventListener('click', () => {
+  document.getElementById('btn-fs-dens').classList.add('active');
+  document.getElementById('btn-fs-hist').classList.remove('active');
+  renderChartFs('dens');
+});
+
+/* ── Evaluación: pop-up ── */
+function closeEvalPopup() {
+  document.getElementById('eval-popup-overlay').classList.remove('open');
+}
+document.getElementById('eval-popup-ok').addEventListener('click', closeEvalPopup);
+document.getElementById('eval-popup-close').addEventListener('click', closeEvalPopup);
+document.getElementById('eval-popup-overlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('eval-popup-overlay')) closeEvalPopup();
+});
+
+['low', 'mid', 'high'].forEach(level => {
+  document.getElementById(`eval-opt-${level}`).addEventListener('click', () => {
+    const opts = document.getElementById('eval-options');
+    if (!opts.dataset.answer) return;
+
+    const answer      = opts.dataset.answer;
+    const threshold   = opts.dataset.threshold;
+    const reason      = opts.dataset.reason;
+    const correctName = opts.dataset.name;
+    const percentile  = opts.dataset.percentile;
+
+    // Marcar radio
+    ['radio-low','radio-mid','radio-high'].forEach(id =>
+      document.getElementById(id).classList.remove('checked'));
+    document.getElementById(`radio-${level}`).classList.add('checked');
+
+    const isCorrect = level === answer;
+
+    // Construir pop-up
+    const titlebar  = document.getElementById('eval-popup-titlebar');
+    const titletext = document.getElementById('eval-popup-titletext');
+    const icon      = document.getElementById('eval-popup-icon');
+    const title     = document.getElementById('eval-popup-title');
+    const detail    = document.getElementById('eval-popup-detail');
+
+    titlebar.className  = `eval-popup-titlebar ${isCorrect ? 'correct' : 'wrong'}`;
+
+    const source  = opts.dataset.source || '–';
+    const gifEl   = document.getElementById('eval-result-gif');
+    gifEl.src     = isCorrect ? './assets/correcto.gif' : './assets/incorrecto.gif';
+    gifEl.alt     = isCorrect ? '¡Correcto!' : 'Incorrecto';
+
+    if (isCorrect) {
+      titletext.textContent = '✔  Evaluación — Respuesta correcta';
+      icon.textContent      = '🏆';
+      title.textContent     = `¡Correcto! — ${correctName}`;
+      detail.innerHTML      =
+        `<span><strong>Umbral / criterio:</strong> ${threshold}</span>` +
+        `<span><strong>Explicación:</strong> ${reason}</span>` +
+        `<span><strong>Posición del caso:</strong> el valor del indicador es mayor que el ${percentile}% de las simulaciones Monte Carlo (percentil ${percentile}).</span>` +
+        `<span style="opacity:0.7;font-size:9px"><strong>Fuente:</strong> ${source}</span>`;
+    } else {
+      const chosenName = { low: 'No concentrado', mid: 'Moderadamente concentrado', high: 'Altamente concentrado' }[level];
+      titletext.textContent = '✘  Evaluación — Respuesta incorrecta';
+      icon.textContent      = '📋';
+      title.textContent     = `Elegiste "${chosenName}" — la respuesta correcta es "${correctName}"`;
+      detail.innerHTML      =
+        `<span><strong>Umbral / criterio:</strong> ${threshold}</span>` +
+        `<span><strong>Por qué es ${correctName}:</strong> ${reason}</span>` +
+        `<span><strong>Posición del caso:</strong> el valor del indicador es mayor que el ${percentile}% de las simulaciones Monte Carlo (percentil ${percentile}).</span>` +
+        `<span style="opacity:0.7;font-size:9px"><strong>Fuente:</strong> ${source}</span>`;
+    }
+
+    document.getElementById('eval-popup-overlay').classList.add('open');
+  });
+});
+
+/* ── Toggle indicadores (solo uno activo) ── */
+['btn-crk','btn-ihh','btn-id','btn-ie'].forEach(id => {
+  document.getElementById(id).addEventListener('click', () => {
+    ['btn-crk','btn-ihh','btn-id','btn-ie'].forEach(bid =>
+      document.getElementById(bid).classList.remove('selected'));
+    document.getElementById(id).classList.add('selected');
+  });
+});
+
+/* ── Minimizar / restaurar ventana ── */
+(function() {
+  const win     = document.querySelector('.window');
+  const btnMin  = document.querySelector('.tb-btn[title="Minimizar"]');
+  const titleBar = document.querySelector('.title-bar');
+
+  function minimize() {
+    win.classList.add('minimized');
+    btnMin.textContent = '▲';
+    btnMin.title       = 'Restaurar';
+  }
+
+  function restore() {
+    win.classList.remove('minimized');
+    btnMin.textContent = '_';
+    btnMin.title       = 'Minimizar';
+  }
+
+  btnMin.addEventListener('click', () => {
+    if (win.classList.contains('minimized')) restore(); else minimize();
+  });
+
+  // Doble clic en la barra de título también restaura
+  titleBar.addEventListener('dblclick', () => {
+    if (win.classList.contains('minimized')) restore();
+  });
+})();
+
+// Ejecutar prueba al cargar la página
+runTests();
+</script>
+</body>
+</html>
